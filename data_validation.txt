@@ -1,0 +1,62 @@
+   SELECT 
+      DISTINCT 
+      b.full_date,
+      b.aladdin_id,
+      b.portfolio_code,
+      b.pm_mandate, 
+      b.pm_ibu,
+      b.pm_lmg,
+      coalesce(vw.MARKETVALUETRADED, vw.MARKETVALUESETTLED) as WSO_MARKET_VALUE,
+
+      --MARKET_VALUE_BASE--
+      coalesce(b.MARKET_VALUE_BASE,0)  AS MARKET_VALUE_BASE_PROD,
+
+      coalesce(a.CLEAN_MARKET_VALUE_BASE,0)  AS CLEAN_MARKET_VALUE_BASE_UAT,
+      coalesce(a.SETTLEMENT_DATE_MARKET_VALUE_BASE,0)  AS SETTLEMENT_DATE_MARKET_VALUE_BASE_UAT,
+      coalesce(a.SETTLEMENT_DATE_CLEAN_MARKET_VALUE_BASE,0)  AS SETTLEMENT_DATE_CLEAN_MARKET_VALUE_BASE_UAT,
+      coalesce(a.END_OF_DAY_MARKET_VALUE_BASE,0)  AS END_OF_DAY_MARKET_VALUE_BASE_UAT,
+      
+      --MARKET_VALUE_LOCAL--
+      coalesce(b.MARKET_VALUE_LOCAL,0) AS MARKET_VALUE_LOCAL_PROD,
+
+      coalesce(a.CLEAN_MARKET_VALUE_LOCAL,0) AS CLEAN_MARKET_VALUE_LOCAL_UAT,
+      coalesce(a.SETTLEMENT_DATE_CLEAN_MARKET_VALUE_LOCAL,0)  AS SETTLEMENT_DATE_CLEAN_MARKET_VALUE_LOCAL_UAT,
+      
+      --MARKET_VALUE_USD--
+      coalesce(b.MARKET_VALUE_USD,0)   AS MARKET_VALUE_USD_PROD,
+      
+      coalesce(a.CLEAN_MARKET_VALUE_USD,0)  AS CLEAN_MARKET_VALUE_USD_UAT,
+      coalesce(a.SETTLEMENT_DATE_MARKET_VALUE_USD,0)  AS SETTLEMENT_DATE_MARKET_VALUE_USD_UAT,
+      coalesce(a.SETTLEMENT_DATE_CLEAN_MARKET_VALUE_USD,0)  AS SETTLEMENT_DATE_CLEAN_MARKET_VALUE_USD_UAT,
+      coalesce(a.END_OF_DAY_MARKET_VALUE_USD,0)  AS END_OF_DAY_MARKET_VALUE_USD_UAT,
+
+      --EXPOSURE_BASE--
+      coalesce(b.EXPOSURE_BASE,0)  AS EXPOSURE_BASE_PROD,
+      
+      coalesce(a.SETTLEMENT_DATE_EXPOSURE_BASE,0) AS SETTLEMENT_DATE_EXPOSURE_BASE_UAT,
+      coalesce(a.END_OF_DAY_EXPOSURE_BASE,0)  AS END_OF_DAY_EXPOSURE_BASE_UAT,
+      
+      --EXPOSURE_USD--
+      coalesce(b.EXPOSURE_USD,0)   AS EXPOSURE_USD_PROD,
+      coalesce(a.SETTLEMENT_DATE_EXPOSURE_USD,0) AS SETTLEMENT_DATE_EXPOSURE_USD_UAT,
+      coalesce(a.END_OF_DAY_EXPOSURE_USD,0)  AS END_OF_DAY_EXPOSURE_USD_UAT
+
+  FROM prod_portfolio_intel.public.cdst_ibor_holding b
+  left JOIN sandbox_01.private_credit.stage_cdst_ibor_holding a
+  ON a.full_date = b.full_date 
+    and a.asset_id = b.asset_id 
+    and a.portfolio_id = b.portfolio_id
+   left JOIN SANDBOX_01.PRIVATE_CREDIT.VW_WSO_LOAN_POSITIONS_SUMMARY vw
+   ON a.full_date = vw.business_date
+   and a.asset_id = sha2(vw.cusip)
+   and a.portfolio_id = sha2(vw.DIM_PORTF_PORTFOLIO_CODE)
+      
+where b.full_date >= '2025-08-01'
+and b.full_date <= '2025-12-19'
+and WSO_MARKET_VALUE is not null
+AND NOT (
+       ROUND(b.MARKET_VALUE_LOCAL, 2) = ROUND(a.CLEAN_MARKET_VALUE_LOCAL, 2)
+    --OR ROUND(b.MARKET_VALUE_LOCAL, 2) = ROUND(a.SETTLEMENT_DATE_MARKET_VALUE_LOCAL, 2)
+    OR ROUND(b.MARKET_VALUE_LOCAL, 2) = ROUND(a.SETTLEMENT_DATE_CLEAN_MARKET_VALUE_LOCAL, 2)
+    --OR ROUND(b.MARKET_VALUE_LOCAL, 2) = ROUND(a.END_OF_DAY_MARKET_VALUE_LOCAL, 2)
+);
