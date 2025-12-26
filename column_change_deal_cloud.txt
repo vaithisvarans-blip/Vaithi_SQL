@@ -1,0 +1,88 @@
+SELECT 
+  COLUMN_NAME,
+  DATA_TYPE,
+  CHARACTER_MAXIMUM_LENGTH,
+  NUMERIC_PRECISION,
+  NUMERIC_SCALE,
+  COMMENT
+FROM dev_staging.information_schema.columns 
+WHERE TABLE_SCHEMA = 'PUBLIC'
+  AND TABLE_NAME = 'DEALCLOUD_DAILY_DEALS'
+  AND COLUMN_NAME IN (
+                    'COUNT_AS_NEW_DEAL',
+                    'SOURCE_COMPANY',
+                    'COMPANY_ATTACHMENT_LEVERAGE',
+                    'MIN_WAL',
+                    'MIN_IRR',
+                    'COMPANY_EBITDA',
+                    'ETL',
+                    'COLLATERAL_TYPE',
+                    'COMPANY_TOTAL_LEVERAGE',
+                    'COMPANY_TOTAL_LTV',
+                    'CAP_CHARGE',
+                    'MIN_MOIC',
+                    'COMPANY_EV_MULTIPLE',
+                    'WEIGHTED_AVERAGE_LIFE',
+                    'COMPANY_ATTACHMENT_LTV'
+  )
+ORDER BY COLUMN_NAME;
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COUNT_AS_NEW_DEAL VARCHAR(16777216) 
+COMMENT 'Flag indicating whether a transaction should be treated as a new origination for pipeline, KPI, and reporting purposes, as opposed to an amendment, add-on, refinancing, or restructuring.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN SOURCE_COMPANY VARCHAR(16777216) 
+COMMENT 'The firm or counterparty from which the investment opportunity originated (e.g., PE sponsor, direct borrower, broker).';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_ATTACHMENT_LEVERAGE VARCHAR(16777216) 
+COMMENT 'The leverage multiple (Debt ÷ EBITDA) calculated at the point in the capital structure where the investor''s tranche attaches and begins to absorb losses.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN MIN_WAL VARCHAR(16777216) 
+COMMENT 'The minimum acceptable weighted average life of the investment, representing the shortest allowable average time to principal repayment based on expected cash flows.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN MIN_IRR VARCHAR(16777216) 
+COMMENT 'The minimum required internal rate of return used as a hurdle or screening threshold for investment approval.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_EBITDA VARCHAR(16777216) 
+COMMENT 'The company''s EBITDA used for underwriting and analysis, typically adjusted or normalized for non-recurring items.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN ETL VARCHAR(16777216) 
+COMMENT 'Expected Tail Loss (ETL) is a downside risk metric that measures the average loss severity in extreme adverse scenarios, beyond a defined confidence threshold.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COLLATERAL_TYPE VARCHAR(16777216) 
+COMMENT 'The category of assets securing the investment, such as enterprise value, real estate, equipment, receivables, or other collateral.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_TOTAL_LEVERAGE VARCHAR(16777216) 
+COMMENT 'The total leverage of the company calculated as total debt divided by EBITDA across the full capital structure.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_TOTAL_LTV VARCHAR(16777216) 
+COMMENT 'The loan-to-value ratio calculated as total debt divided by enterprise value or collateral value at the company or asset level.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN CAP_CHARGE VARCHAR(16777216) 
+COMMENT 'The amount of economic or regulatory capital allocated to support the investment based on internal risk or capital models.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN MIN_MOIC VARCHAR(16777216) 
+COMMENT 'The minimum multiple of invested capital required to meet return objectives over the life of the investment.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_EV_MULTIPLE VARCHAR(16777216) 
+COMMENT 'The valuation multiple calculated as enterprise value divided by EBITDA, used for underwriting, risk assessment, and downside analysis.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN WEIGHTED_AVERAGE_LIFE VARCHAR(16777216) 
+COMMENT 'The average time to receive principal repayments, weighted by the amount of principal repaid over the life of the investment.';
+
+ALTER TABLE DEV_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS 
+MODIFY COLUMN COMPANY_ATTACHMENT_LTV VARCHAR(16777216) 
+COMMENT 'The loan-to-value ratio at the attachment point of the investor''s tranche, reflecting the percentage of enterprise or collateral value that is senior to the investment before losses impact it.';
