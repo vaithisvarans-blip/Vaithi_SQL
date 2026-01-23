@@ -1,181 +1,143 @@
-$scopeValue='${SF_SCOPE}'
-# Use the provided environment variable for both client_id and client_s
-$clientId='${SNOWFLAKE_OAUTH_DML_ID}'
-$clientSecret='${SNOWFLAKE_OAUTH_DML_SECRET}'
-
-# Build the form data for the POST request
-$body = "grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret&scope=$scopeValue"
-
-# Define the token endpoint URL (update the tenant identifier 'l' as needed)
-$tokenUrl = '${SF_TOKEN_URL}'
-
-try {
-    # Send the POST request to obtain the token
-    $response = Invoke-RestMethod -Method Post -Uri $tokenUrl -ContentType "application/x-www-form-urlencoded" -Body $body
-}
-catch {
-    Write-Output "Error obtaining OAuth token: $($_.Exception.Message)"
-    throw "Failed to run successfully"
-}
-
-# Extract the access token from the JSON response
-$OAUTH_TOKEN = $response.access_token
-
-if ([string]::IsNullOrEmpty($OAUTH_TOKEN) -or $OAUTH_TOKEN -eq "null") {
-    Write-Output "Failed to obtain OAuth token"
-    throw "Failed to run successfully"
-}
-
-$result = Invoke-Command -ComputerName ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -ScriptBlock {
-    snowsql -q "${BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1_SQL}" `
-        -a "${SNOWFLAKE_ORGANIZATION_NAME}" `
-        -r "${Snowflake_Role}" `
-        -w "${Snowflake_Warehouse}" `
-        -d "${Snowflake_Database}" `
-        -s "${Snowflake_Schema}" `
-        --authenticator=oauth `
-        --token="$OAUTH_TOKEN" 2>&1
-}
-
-#$result = Invoke-Command -Computername ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -Scriptblock {snowsql --config ${SNOWSQL_CONFIG_FILE} -d ${Snowflake_Database} -s ${Snowflake_Schema} -w ${Snowflake_Warehouse} -q "${BUSINESS_DATE_CAPITAL_CHARGE_SQL}" -o output_format=plain -o header=false -o friendly=false -o timing=false}
+# ===============================
+# Common Configuration
+# ===============================
+$scopeValue   = '${SF_SCOPE}'
+$clientId     = '${SNOWFLAKE_OAUTH_DML_ID}'
+$clientSecret = '${SNOWFLAKE_OAUTH_DML_SECRET}'
+$tokenUrl     = '${SF_TOKEN_URL}'
 
 $schedulerHost = '${ACTIVEBATCH_SERVER}'
-$objectID = '${AB_OBJECT_ID}';
-$varName = 'BUSINESS_DATE_CAPITAL_CHARGE'
+$objectID      = '${AB_OBJECT_ID}'
 
+$executionMachine = "${@ExecutionMachine}${EXECUTION_MACHINE_ENDING}"
 
-$jss=New-Object -ComObject "ActiveBatch.AbatJobScheduler"
-$jss.connect($schedulerHost);
-$object=$jss.getabatobject($objectID);
-$vars =$object.getvariables();
+$MAX_OAUTH_RETRIES = 3
+$RETRY_DELAY_SEC  = 5
 
-foreach($var in $vars){
-if($var.Name -eq $varName){
+# ===============================
+# Function: Get OAuth Token (with retry)
+# ===============================
+function Get-SnowflakeOAuthToken {
 
-	$var.Value = $result;
-	$object.Update();
-	
-}
-}
-Start-Sleep -Seconds 10
-$scopeValue='${SF_SCOPE}'
-# Use the provided environment variable for both client_id and client_s
-$clientId='${SNOWFLAKE_OAUTH_DML_ID}'
-$clientSecret='${SNOWFLAKE_OAUTH_DML_SECRET}'
+    $body = "grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret&scope=$scopeValue"
 
-# Build the form data for the POST request
-$body = "grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret&scope=$scopeValue"
+    for ($attempt = 1; $attempt -le $MAX_OAUTH_RETRIES; $attempt++) {
+        try {
+            $response = Invoke-RestMethod `
+                -Method Post `
+                -Uri $tokenUrl `
+                -ContentType "application/x-www-form-urlencoded" `
+                -Body $body
 
-# Define the token endpoint URL (update the tenant identifier 'l' as needed)
-$tokenUrl = '${SF_TOKEN_URL}'
+            if (-not [string]::IsNullOrEmpty($response.access_token)) {
+                return $response.access_token
+            }
 
-try {
-    # Send the POST request to obtain the token
-    $response = Invoke-RestMethod -Method Post -Uri $tokenUrl -ContentType "application/x-www-form-urlencoded" -Body $body
-}
-catch {
-    Write-Output "Error obtaining OAuth token: $($_.Exception.Message)"
-    throw "Failed to run successfully"
-}
+            throw "Empty OAuth token returned"
+        }
+        catch {
+            Write-Output "OAuth attempt $attempt failed: $($_.Exception.Message)"
 
-# Extract the access token from the JSON response
-$OAUTH_TOKEN = $response.access_token
+            if ($attempt -eq $MAX_OAUTH_RETRIES) {
+                throw "Failed to obtain OAuth token after $MAX_OAUTH_RETRIES attempts"
+            }
 
-if ([string]::IsNullOrEmpty($OAUTH_TOKEN) -or $OAUTH_TOKEN -eq "null") {
-    Write-Output "Failed to obtain OAuth token"
-    throw "Failed to run successfully"
+            Start-Sleep -Seconds $RETRY_DELAY_SEC
+        }
+    }
 }
 
+# ===============================
+# Function: Execute SnowSQL
+# ===============================
+function Run-SnowSqlQuery {
+    param (
+        [Parameter(Mandatory)]
+        [string]$SqlQuery,
 
-$result = Invoke-Command -ComputerName ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -ScriptBlock {
-    snowsql -q "${BUSINESS_DATE_FACT_MONTHLY_ABOR_POSITIONS_SQL}" `
-        -a "${SNOWFLAKE_ORGANIZATION_NAME}" `
-        -r "${Snowflake_Role}" `
-        -w "${Snowflake_Warehouse}" `
-        -d "${Snowflake_Database}" `
-        -s "${Snowflake_Schema}" `
-        --authenticator=oauth `
-        --token="$OAUTH_TOKEN" 2>&1
+        [Parameter(Mandatory)]
+        [string]$OAuthToken
+    )
+
+    Invoke-Command -ComputerName $executionMachine -ScriptBlock {
+        param ($SqlQuery, $OAuthToken)
+
+        snowsql -q $SqlQuery `
+            -a "${SNOWFLAKE_ORGANIZATION_NAME}" `
+            -r "${Snowflake_Role}" `
+            -w "${Snowflake_Warehouse}" `
+            -d "${Snowflake_Database}" `
+            -s "${Snowflake_Schema}" `
+            --authenticator=oauth `
+            --token="$OAuthToken" 2>&1
+
+    } -ArgumentList $SqlQuery, $OAuthToken
 }
 
-#$result = Invoke-Command -Computername ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -Scriptblock {snowsql --config ${SNOWSQL_CONFIG_FILE} -d ${Snowflake_Database} -s ${Snowflake_Schema} -w ${Snowflake_Warehouse} -q "${BUSINESS_DATE_FACT_MONTHLY_ABOR_POSITIONS_SQL}" -o output_format=plain -o header=false -o friendly=false -o timing=false}
+# ===============================
+# Function: Update ActiveBatch Variable
+# ===============================
+function Update-ActiveBatchVariable {
+    param (
+        [Parameter(Mandatory)]
+        [string]$VariableName,
 
-$schedulerHost = '${ACTIVEBATCH_SERVER}'
-$objectID = '${AB_OBJECT_ID}';
-$varName = 'BUSINESS_DATE_FACT_MONTHLY_ABOR_POSITIONS'
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
 
+    $jss = New-Object -ComObject "ActiveBatch.AbatJobScheduler"
+    $jss.Connect($schedulerHost)
 
-$jss=New-Object -ComObject "ActiveBatch.AbatJobScheduler"
-$jss.connect($schedulerHost);
-$object=$jss.getabatobject($objectID);
-$vars =$object.getvariables();
+    $object = $jss.GetAbatObject($objectID)
+    $vars   = $object.GetVariables()
 
-foreach($var in $vars){
-if($var.Name -eq $varName){
-
-	$var.Value = $result;
-	$object.Update();
-	
-}
-}
-Start-Sleep -Seconds 10
-$scopeValue='${SF_SCOPE}'
-# Use the provided environment variable for both client_id and client_s
-$clientId='${SNOWFLAKE_OAUTH_DML_ID}'
-$clientSecret='${SNOWFLAKE_OAUTH_DML_SECRET}'
-
-# Build the form data for the POST request
-$body = "grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret&scope=$scopeValue"
-
-# Define the token endpoint URL (update the tenant identifier 'l' as needed)
-$tokenUrl = '${SF_TOKEN_URL}'
-
-try {
-    # Send the POST request to obtain the token
-    $response = Invoke-RestMethod -Method Post -Uri $tokenUrl -ContentType "application/x-www-form-urlencoded" -Body $body
-}
-catch {
-    Write-Output "Error obtaining OAuth token: $($_.Exception.Message)"
-    throw "Failed to run successfully"
+    foreach ($var in $vars) {
+        if ($var.Name -eq $VariableName) {
+            $var.Value = $Value
+            $object.Update()
+            break
+        }
+    }
 }
 
-# Extract the access token from the JSON response
-$OAUTH_TOKEN = $response.access_token
+# ===============================
+# Wrapper Function (ONE place to run everything)
+# ===============================
+function Execute-SnowflakeJob {
+    param (
+        [Parameter(Mandatory)]
+        [string]$SqlQuery,
 
-if ([string]::IsNullOrEmpty($OAUTH_TOKEN) -or $OAUTH_TOKEN -eq "null") {
-    Write-Output "Failed to obtain OAuth token"
-    throw "Failed to run successfully"
+        [Parameter(Mandatory)]
+        [string]$ActiveBatchVariable,
+
+        [int]$SleepSeconds = 10
+    )
+
+    $token  = Get-SnowflakeOAuthToken
+    $result = Run-SnowSqlQuery `
+                -SqlQuery $SqlQuery `
+                -OAuthToken $token
+
+    Update-ActiveBatchVariable `
+        -VariableName $ActiveBatchVariable `
+        -Value $result
+
+    Start-Sleep -Seconds $SleepSeconds
 }
 
-$result = Invoke-Command -ComputerName ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -ScriptBlock {
-    snowsql -q "${BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1_SQL}" `
-        -a "${SNOWFLAKE_ORGANIZATION_NAME}" `
-        -r "${Snowflake_Role}" `
-        -w "${Snowflake_Warehouse}" `
-        -d "${Snowflake_Database}" `
-        -s "${Snowflake_Schema}" `
-        --authenticator=oauth `
-        --token="$OAUTH_TOKEN" 2>&1
-}
+# ===============================
+# Job Executions (clean & readable)
+# ===============================
+Execute-SnowflakeJob `
+    -SqlQuery "${BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1_SQL}" `
+    -ActiveBatchVariable 'BUSINESS_DATE_CAPITAL_CHARGE'
 
-#$result = Invoke-Command -Computername ${@ExecutionMachine}${EXECUTION_MACHINE_ENDING} -Scriptblock {snowsql --config ${SNOWSQL_CONFIG_FILE} -d ${Snowflake_Database} -s ${Snowflake_Schema} -w ${Snowflake_Warehouse} -q "${BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1_SQL}" -o output_format=plain -o header=false -o friendly=false -o timing=false}
+Execute-SnowflakeJob `
+    -SqlQuery "${BUSINESS_DATE_FACT_MONTHLY_ABOR_POSITIONS_SQL}" `
+    -ActiveBatchVariable 'BUSINESS_DATE_FACT_MONTHLY_ABOR_POSITIONS'
 
-$schedulerHost = '${ACTIVEBATCH_SERVER}'
-$objectID = '${AB_OBJECT_ID}';
-$varName = 'BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1'
-
-
-$jss=New-Object -ComObject "ActiveBatch.AbatJobScheduler"
-$jss.connect($schedulerHost);
-$object=$jss.getabatobject($objectID);
-$vars =$object.getvariables();
-
-foreach($var in $vars){
-if($var.Name -eq $varName){
-
-	$var.Value = $result;
-	$object.Update();
-	
-}
-}
-Start-Sleep -Seconds 10                 *****-->Please rewrite this code without using a loop or repeating the same code, while keeping the same behavior.
+Execute-SnowflakeJob `
+    -SqlQuery "${BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1_SQL}" `
+    -ActiveBatchVariable 'BUSINESS_DATE_MONTHLY_CASH_FLOW_LOAD_1'
