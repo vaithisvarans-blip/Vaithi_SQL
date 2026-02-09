@@ -1,99 +1,95 @@
----Prod Validation
-
+WITH loanx_id AS (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(loanx_id ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
+)
 SELECT 
-  MAX(
-    LENGTH(COUNT_AS_NEW_DEAL)
-  ) AS MAX_COUNT_AS_NEW_DEAL 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---5
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.loanx_id = b.loanx_id) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  ), SECURITY_ID as
+  (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(SECURITY_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
+)
 SELECT 
-  MAX(
-    LENGTH(SOURCE_COMPANY)
-  ) AS MAX_SOURCE_COMPANY 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---53
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.SECURITY_ID = b.SECURITY_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  ), CUSIP_ID as
+  (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(CUSIP_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
+)
 SELECT 
-  MAX(
-    LENGTH(COMPANY_ATTACHMENT_LEVERAGE)
-  ) AS MAX_COMPANY_ATTACHMENT_LEVERAGE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---4
-SELECT 
-  MAX(
-    LENGTH(MIN_WAL)
-  ) AS MAX_MIN_WAL 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---4
-SELECT 
-  MAX(
-    LENGTH(MIN_IRR)
-  ) AS MAX_MIN_IRR 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---6
-SELECT 
-  MAX(
-    LENGTH(COMPANY_EBITDA)
-  ) AS MAX_COMPANY_EBITDA 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---17
-SELECT 
-  MAX(
-    LENGTH(ETL)
-  ) AS MAX_ETL 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---5
-SELECT 
-  MAX(
-    LENGTH(COLLATERAL_TYPE)
-  ) AS MAX_COLLATERAL_TYPE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---108
-SELECT 
-  MAX(
-    LENGTH(COMPANY_TOTAL_LEVERAGE)
-  ) AS MAX_COMPANY_TOTAL_LEVERAGE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---4
-SELECT 
-  MAX(
-    LENGTH(COMPANY_TOTAL_LTV)
-  ) AS MAX_COMPANY_TOTAL_LTV 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---12
-SELECT 
-  MAX(
-    LENGTH(CAP_CHARGE)
-  ) AS MAX_CAP_CHARGE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---6
-SELECT 
-  MAX(
-    LENGTH(MIN_MOIC)
-  ) AS MAX_MIN_MOIC 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---4
-SELECT 
-  MAX(
-    LENGTH(COMPANY_EV_MULTIPLE)
-  ) AS MAX_COMPANY_EV_MULTIPLE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;
---4
-SELECT 
-  MAX(
-    LENGTH(WEIGHTED_AVERAGE_LIFE)
-  ) AS MAX_WEIGHTED_AVERAGE_LIFE 
-FROM 
-  PROD_STAGING.PUBLIC.DEALCLOUD_DAILY_DEALS;--4
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.CUSIP_ID = b.CUSIP_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  )
+  select * from loanx_id
+  union all
+  select * from SECURITY_ID
+  union all
+  select * from CUSIP_ID;
