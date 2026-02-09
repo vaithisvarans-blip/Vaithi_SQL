@@ -1,180 +1,95 @@
-WITH WSO_WITH_FILTER AS (
-
-/* ================= WITH CONDITION ================= */
-
-WITH WSO_LOANX_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT wsoe
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER edm
-   ON WSOE.LOANX_ID = EDM.LOANX_ID
-   AND COALESCE(WSOE.LOANX_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-WHERE
-   (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
-   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
-GROUP BY 1,2,3,4
-),
-
-WSO_SECURITY_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
-   ON WSOE.SECURITY_ID = EDM.LIN
-   AND COALESCE(SECURITY_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-WHERE
-   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
-   AND (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
-   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
-GROUP BY 1,2,3,4
-),
-
-WSO_CUSIP_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
-   ON WSOE.CUSIP_ID = EDM.ALADDIN_ID
-   AND COALESCE(WSOE.CUSIP_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-WHERE
-   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
-   AND NOT EXISTS (SELECT 1 FROM WSO_SECURITY_ID SEC WHERE EDM.ALADDIN_ID = SEC.ALADDIN_ID)
-   AND (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
-   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
-GROUP BY 1,2,3,4
+WITH loanx_id AS (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(loanx_id ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
 )
-
-SELECT *, 'WITH_FILTER' AS FILTER_FLAG FROM WSO_LOANX_ID
-UNION ALL
-SELECT *, 'WITH_FILTER' FROM WSO_SECURITY_ID
-UNION ALL
-SELECT *, 'WITH_FILTER' FROM WSO_CUSIP_ID
-),
-
-WSO_WITHOUT_FILTER AS (
-
-/* ================= WITHOUT CONDITION ================= */
-
-WITH WSO_LOANX_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT wsoe
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER edm
-   ON WSOE.LOANX_ID = EDM.LOANX_ID
-   AND COALESCE(WSOE.LOANX_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-GROUP BY 1,2,3,4
-),
-
-WSO_SECURITY_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
-   ON WSOE.SECURITY_ID = EDM.LIN
-   AND COALESCE(SECURITY_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-WHERE
-   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
-GROUP BY 1,2,3,4
-),
-
-WSO_CUSIP_ID AS (
-SELECT DISTINCT 
-    wsoe.business_date,
-    edm.aladdin_id,
-    wsoe.lead_manager,
-    wsoe.deal_sponsor,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
-    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded') 
-        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
-    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded') 
-        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
-FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
-INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
-   ON WSOE.CUSIP_ID = EDM.ALADDIN_ID
-   AND COALESCE(WSOE.CUSIP_ID,'') <> ''
-   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
-WHERE
-   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
-   AND NOT EXISTS (SELECT 1 FROM WSO_SECURITY_ID SEC WHERE EDM.ALADDIN_ID = SEC.ALADDIN_ID)
-GROUP BY 1,2,3,4
+SELECT 
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.loanx_id = b.loanx_id) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  ), SECURITY_ID as
+  (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(SECURITY_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
 )
-
-SELECT *, 'WITHOUT_FILTER' AS FILTER_FLAG FROM WSO_LOANX_ID
-UNION ALL
-SELECT *, 'WITHOUT_FILTER' FROM WSO_SECURITY_ID
-UNION ALL
-SELECT *, 'WITHOUT_FILTER' FROM WSO_CUSIP_ID
+SELECT 
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.SECURITY_ID = b.SECURITY_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  ), CUSIP_ID as
+  (
+  SELECT 
+    weighted_average_all_in_rate,
+   -- ALADDIN_ID,
+    loanx_id,
+    SECURITY_ID,
+    CUSIP_ID,
+    business_date,
+    lead_manager,
+    deal_sponsor
+  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
+  where (coalesce(CUSIP_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
 )
-
-/* ================= FINAL UNION COMPARISON ================= */
-
-SELECT *
-FROM WSO_WITH_FILTER
-
-UNION ALL
-
-SELECT *
-FROM WSO_WITHOUT_FILTER;
+SELECT 
+  a.weighted_average_all_in_rate,
+ -- a.ALADDIN_ID,
+  a.loanx_id,
+   b.SECURITY_ID,
+    b.CUSIP_ID,
+  a.business_date,
+  a.lead_manager as lead_manager_1,
+  b.lead_manager as lead_manager_2,
+  a.deal_sponsor
+FROM same_name a
+JOIN same_name b 
+  ON a.business_date = b.business_date 
+  AND (a.CUSIP_ID = b.CUSIP_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
+  AND a.lead_manager <> b.lead_manager
+  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
+  )
+  select * from loanx_id
+  union all
+  select * from SECURITY_ID
+  union all
+  select * from CUSIP_ID;
