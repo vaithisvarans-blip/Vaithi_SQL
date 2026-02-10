@@ -1,61 +1,80 @@
-WITH normalized_data AS (
 
-    SELECT 
-        weighted_average_all_in_rate,
-        loanx_id AS instrument_id,
-        'LOANX_ID' AS id_type,
-        SECURITY_ID,
-        CUSIP_ID,
-        business_date,
-        lead_manager,
-        deal_sponsor
-    FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-    WHERE COALESCE(loanx_id,'') <> ''
+/*We want to keep our current logic that only uses funded contracts (CONTRACT_NAME that are not 'UNFND','Unfunded') when we calculate things like base rate, spread, and coupon. In addition to that, we also need to include loans where all the CONTRACT_NAME are null , so those loans are no longer dropped from the view.we are excluding about 18–20 loans because both the lead manager and deal sponsor are null for those loans because of current filter logic in where condition and also We need to change the logic using case or iff or decode or something more efficient solution so those loans are included in the view, even if the lead manager and deal sponsor are null.*/
 
-    UNION ALL
+WITH WSO_LOANX_ID AS (
+SELECT DISTINCT
+    wsoe.business_date,
+    edm.aladdin_id,
+    wsoe.lead_manager,
+    wsoe.deal_sponsor,
+    AVG(CASE WHEN TRIM(CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
+    MAX(CASE WHEN TRIM(CONTRACT_NAME) IN ('UNFND','Unfunded')
+        THEN COMMITMENT_FEE END) COMMITMENT_FEE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
+FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT wsoe
+INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER edm
+   ON WSOE.LOANX_ID = EDM.LOANX_ID
+   AND COALESCE(WSOE.LOANX_ID,'') <> ''
+   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
+WHERE
+   (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
+   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
+GROUP BY 1,2,3,4
+),
 
-    SELECT 
-        weighted_average_all_in_rate,
-        SECURITY_ID AS instrument_id,
-        'SECURITY_ID' AS id_type,
-        SECURITY_ID,
-        CUSIP_ID,
-        business_date,
-        lead_manager,
-        deal_sponsor
-    FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-    WHERE COALESCE(SECURITY_ID,'') <> ''
+WSO_SECURITY_ID AS (
+SELECT DISTINCT
+    wsoe.business_date,
+    edm.aladdin_id,
+    wsoe.lead_manager,
+    wsoe.deal_sponsor,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
+    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded')
+        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
+FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
+INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
+   ON WSOE.SECURITY_ID = EDM.LIN
+   AND COALESCE(SECURITY_ID,'') <> ''
+   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
+WHERE
+   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
+   AND (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
+   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
+GROUP BY 1,2,3,4
+),
 
-    UNION ALL
-
-    SELECT 
-        weighted_average_all_in_rate,
-        CUSIP_ID AS instrument_id,
-        'CUSIP_ID' AS id_type,
-        SECURITY_ID,
-        CUSIP_ID,
-        business_date,
-        lead_manager,
-        deal_sponsor
-    FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-    WHERE COALESCE(CUSIP_ID,'') <> ''
+WSO_CUSIP_ID AS (
+SELECT DISTINCT
+    wsoe.business_date,
+    edm.aladdin_id,
+    wsoe.lead_manager,
+    wsoe.deal_sponsor,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN wsoe.CONTRACT_BASE_RATE END) CONTRACT_BASE_RATE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.CONTRACT_SPREADADJUSTMENT + wsoe.CONTRACT_SPREAD) END) CONTRACT_SPREAD,
+    MAX(CASE WHEN TRIM(wsoe.CONTRACT_NAME) IN ('UNFND','Unfunded')
+        THEN wsoe.COMMITMENT_FEE END) COMMITMENT_FEE,
+    AVG(CASE WHEN TRIM(wsoe.CONTRACT_NAME) NOT IN ('UNFND','Unfunded')
+        THEN (wsoe.WEIGHTED_AVERAGE_ALL_IN_RATE*100) END) COUPON_RATE
+FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT WSOE
+INNER JOIN PROD_STAGING.PUBLIC.EDM_DAILY_SECURITYMASTER EDM
+   ON WSOE.CUSIP_ID = EDM.ALADDIN_ID
+   AND COALESCE(WSOE.CUSIP_ID,'') <> ''
+   AND WSOE.BUSINESS_DATE = EDM.BUSINESS_DATE
+WHERE
+   NOT EXISTS (SELECT 1 FROM WSO_LOANX_ID LNX WHERE EDM.ALADDIN_ID = LNX.ALADDIN_ID)
+   AND NOT EXISTS (SELECT 1 FROM WSO_SECURITY_ID SEC WHERE EDM.ALADDIN_ID = SEC.ALADDIN_ID)
+   AND (WSOE.LEAD_MANAGER <> '' OR WSOE.DEAL_SPONSOR <> '')
+   AND (WSOE.LEAD_MANAGER IS NOT NULL OR WSOE.DEAL_SPONSOR IS NOT NULL)
+GROUP BY 1,2,3,4
 )
-
-SELECT
-    a.weighted_average_all_in_rate,
-    a.instrument_id,
-    a.id_type,
-    a.SECURITY_ID,
-    a.CUSIP_ID,
-    a.business_date,
-    a.lead_manager AS lead_manager_1,
-    b.lead_manager AS lead_manager_2,
-    a.deal_sponsor
-FROM normalized_data a
-JOIN normalized_data b
-    ON a.business_date = b.business_date
-    AND a.instrument_id = b.instrument_id
-    AND a.id_type = b.id_type
-    AND a.lead_manager <> b.lead_manager
-    AND COALESCE(a.lead_manager,'') <> ''
-    AND COALESCE(b.lead_manager,'') <> '';
