@@ -1,95 +1,37 @@
-WITH loanx_id AS (
-  SELECT 
-    weighted_average_all_in_rate,
-   -- ALADDIN_ID,
-    loanx_id,
-    SECURITY_ID,
-    CUSIP_ID,
-    business_date,
-    lead_manager,
-    deal_sponsor
-  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-  where (coalesce(loanx_id ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
+WITH OLD_RESULT AS (
+    ---- paste OLD query here
+),
+
+NEW_RESULT AS (
+    ---- paste NEW query here
+),
+
+COMPARISON AS (
+    SELECT
+        COALESCE(o.business_date, n.business_date) AS business_date,
+        COALESCE(o.aladdin_id, n.aladdin_id) AS aladdin_id,
+
+        o.coupon_rate AS old_coupon_rate,
+        n.coupon_rate AS new_coupon_rate,
+
+        /* Difference with tolerance */
+        ABS(NVL(o.coupon_rate,0) - NVL(n.coupon_rate,0)) AS coupon_diff
+
+    FROM OLD_RESULT o
+    FULL OUTER JOIN NEW_RESULT n
+        ON o.business_date = n.business_date
+        AND o.aladdin_id = n.aladdin_id
 )
-SELECT 
-  a.weighted_average_all_in_rate,
- -- a.ALADDIN_ID,
-  a.loanx_id,
-   b.SECURITY_ID,
-    b.CUSIP_ID,
-  a.business_date,
-  a.lead_manager as lead_manager_1,
-  b.lead_manager as lead_manager_2,
-  a.deal_sponsor
-FROM same_name a
-JOIN same_name b 
-  ON a.business_date = b.business_date 
-  AND (a.loanx_id = b.loanx_id) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
-  AND a.lead_manager <> b.lead_manager
-  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
-  ), SECURITY_ID as
-  (
-  SELECT 
-    weighted_average_all_in_rate,
-   -- ALADDIN_ID,
-    loanx_id,
-    SECURITY_ID,
-    CUSIP_ID,
+
+SELECT
     business_date,
-    lead_manager,
-    deal_sponsor
-  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-  where (coalesce(SECURITY_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
-)
-SELECT 
-  a.weighted_average_all_in_rate,
- -- a.ALADDIN_ID,
-  a.loanx_id,
-   b.SECURITY_ID,
-    b.CUSIP_ID,
-  a.business_date,
-  a.lead_manager as lead_manager_1,
-  b.lead_manager as lead_manager_2,
-  a.deal_sponsor
-FROM same_name a
-JOIN same_name b 
-  ON a.business_date = b.business_date 
-  AND (a.SECURITY_ID = b.SECURITY_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
-  AND a.lead_manager <> b.lead_manager
-  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
-  ), CUSIP_ID as
-  (
-  SELECT 
-    weighted_average_all_in_rate,
-   -- ALADDIN_ID,
-    loanx_id,
-    SECURITY_ID,
-    CUSIP_ID,
-    business_date,
-    lead_manager,
-    deal_sponsor
-  FROM PROD_STAGING.PUBLIC.WSO_DAILY_SECURITYMASTER_ENRICHMENT
-  where (coalesce(CUSIP_ID ,'') <> '') --or (coalesce(SECURITY_ID ,'') <> '') or (coalesce(CUSIP_ID ,'') <> ''))
-)
-SELECT 
-  a.weighted_average_all_in_rate,
- -- a.ALADDIN_ID,
-  a.loanx_id,
-   b.SECURITY_ID,
-    b.CUSIP_ID,
-  a.business_date,
-  a.lead_manager as lead_manager_1,
-  b.lead_manager as lead_manager_2,
-  a.deal_sponsor
-FROM same_name a
-JOIN same_name b 
-  ON a.business_date = b.business_date 
-  AND (a.CUSIP_ID = b.CUSIP_ID) --or (a.SECURITY_ID = b.SECURITY_ID) or (a.CUSIP_ID = b.CUSIP_ID))
-  AND a.lead_manager <> b.lead_manager
-  and (coalesce(a.lead_manager,'') <> '' and coalesce(b.lead_manager,'') <> '')
-  )
-  select * from loanx_id
-  union all
-  select * from SECURITY_ID
-  union all
-  select * from CUSIP_ID;
+    aladdin_id,
+    old_coupon_rate,
+    new_coupon_rate,
+    coupon_diff
+FROM COMPARISON
+WHERE
+      old_coupon_rate IS NULL
+   OR new_coupon_rate IS NULL
+   OR coupon_diff > 0.0001   -- tolerance
+ORDER BY aladdin_id;
